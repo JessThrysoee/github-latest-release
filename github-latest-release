@@ -1,0 +1,163 @@
+#!/bin/bash
+
+# prerequisite: curl, jq, bsdtar
+
+set -euo pipefail
+
+list_download_urls() {
+    local repo="$1"
+    curl -sSL "https://api.github.com/repos/${repo}/releases/latest"  \
+      | jq --unbuffered -r '.assets[].browser_download_url'
+}
+
+select_download_url() {
+    local repo="$1"
+    local regex="$2"
+
+    matches="$(curl -sSL "https://api.github.com/repos/${repo}/releases/latest"  \
+        | jq --unbuffered -r --arg regex "$regex" '.assets[].browser_download_url | select(.|test($regex))')"
+
+    if [[ -z $matches ]]; then
+        lines="0"
+    else 
+        lines="$(wc -l <<< "$matches" | tr -d '[:blank:]')"
+    fi
+
+    if (( lines != 1 )); then
+        echo "found $lines matches, refine the pattern '$regex' until exactly one match is found" >&2
+        if (( lines > 0 )); then
+            printf "\n%s\n" "$matches" >&2
+        fi
+        exit 1
+    else
+        printf "%s\n" "$matches"
+    fi
+}
+
+fetch_release() {
+    local download_url="$1"
+    local output="$2"
+
+    if [[ -n $output ]]; then
+        curl -sSL -o "$output" "$download_url"
+    else
+        curl -sSL -O "$download_url"
+    fi
+}
+
+list_files() {
+    local download_url="$1"
+    curl -sSL "$download_url" | bsdtar -t
+}
+
+extract_files() {
+    local download_url="$1"
+    local include_glob_pattern="$2"
+    local directory="$3"
+    local strip_components="$4"
+
+    curl -sSL "$download_url" | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
+}
+
+usage() {
+    local arg0="${0##*/}"
+    cat <<EOF
+Usage:
+
+  $arg0 -r <OWNER/REPO> -l -p [REGEX_PATTERN]
+  $arg0 -r <OWNER/REPO> -f -p <REGEX_PATTERN> -o [OUTPUT]
+  $arg0 -r <OWNER/REPO> -t -p <REGEX_PATTERN>
+  $arg0 -r <OWNER/REPO> -x -p <REGEX_PATTERN> -i [INCLUDE_GLOB_PATTERN] -s [STRIP_COMPONENTS] -c [DIRECTORY]
+
+Options:
+
+  -r <OWNER/REPO>
+    The mandatory github repo identifier, e.g. the 'owner/repo' part of 'https://github.com/owner/repo'
+
+  -l
+    List all available download urls. Use the '-p' regex pattern to identify a single download url.
+
+    Example: $arg0 -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
+
+  -f
+    Fetch a release package. Use this if the release is a single executable or to download an archive.
+    Option '-o' is curl '-o'.
+
+    Example: $arg0 -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
+
+  -t
+    Fetch and list files in archive. 
+
+    Example: $arg0 -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
+
+  -x
+    Fetch and extract from an archive. 
+    Option '-i' is bsdtar '--include', '-s' is bsdtar '--strip-components', and '-c' is bsdar '-C'.
+
+    Example: $arg0 -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' -i '*/prometheus' -s 1 -c /tmp
+
+EOF
+}
+
+main() {
+    local arg0 opt download_url
+    local list_url=""
+    local fetch=""
+    local list_files=""
+    local extract=""
+    local regex_pattern=".*"
+    local include_glob_pattern="*"
+    local strip_components="0"
+    local directory="."
+    local output=""
+
+    while getopts ":r:lftxp:i:s:c:o:h" opt; do
+        case $opt in
+            r) repo="$OPTARG" ;;
+            l) list_url="1" ;;
+            f) fetch="1" ;;
+            t) list_files="1" ;;
+            x) extract="1" ;;
+            p) regex_pattern="$OPTARG" ;;
+            i) include_glob_pattern="$OPTARG" ;;
+            s) strip_components="$OPTARG" ;;
+            c) directory="$OPTARG" ;;
+            o) output="$OPTARG" ;;
+            h) usage; exit 0 ;;
+            :) echo "Error: -${OPTARG} requires an argument" >&2 ;;
+            \?) echo "Invalid option -$OPTARG" >&2 ;;
+        esac
+    done
+
+    if [[ -z $repo ]]; then
+        usage
+        exit 1
+    fi
+
+    if [[ -n $list_url ]]; then
+        if [[ -n $regex_pattern ]]; then
+            select_download_url "$repo" "$regex_pattern"
+        else
+            list_download_urls "$repo"
+        fi
+
+    elif [[ -n $fetch ]]; then
+        download_url="$(select_download_url "$repo" "$regex_pattern")"
+        fetch_release "$download_url" "$output"
+
+    elif [[ -n $list_files ]]; then
+        download_url="$(select_download_url "$repo" "$regex_pattern")"
+        list_files "$download_url"
+
+    elif [[ -n $extract ]]; then
+        download_url="$(select_download_url "$repo" "$regex_pattern")"
+        extract_files "$download_url" "$include_glob_pattern" "$directory" "$strip_components"
+
+    else
+        usage
+        exit 1
+    fi
+}
+
+main "$@"
+
