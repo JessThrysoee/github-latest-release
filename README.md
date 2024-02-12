@@ -20,36 +20,52 @@ A small container is provided for convenience of downloading release executables
 
 # Usage
 
-      github-latest-release -r <OWNER/REPO> -l -p [REGEX_PATTERN]
-      github-latest-release -r <OWNER/REPO> -f -p <REGEX_PATTERN> -o [OUTPUT]
-      github-latest-release -r <OWNER/REPO> -t -p <REGEX_PATTERN>
-      github-latest-release -r <OWNER/REPO> -x -p <REGEX_PATTERN> -i [INCLUDE_GLOB_PATTERN] -s [STRIP_COMPONENTS] -c [DIRECTORY]
+    Usage:
+
+      github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
+      github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+      github-latest-releast -r <OWNER/REPO> -t -p <REGEX>
+      github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
+                            -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
     Options:
 
       -r <OWNER/REPO>
-        The mandatory github repo identifier, e.g. the 'owner/repo' part of 'https://github.com/owner/repo'
+         The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
 
       -l
-        List all available download urls. Use the '-p' regex pattern to identify a single download url.
+         List all available download urls. Use the '-p' regex pattern to identify a single
+         download url for use in the fetch commands.
 
-        Example: github-latest-release -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
+         Example:
+           github-latest-releast -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
 
       -f
-        Fetch a release package. Use this if the release is a single executable or to download an archive.
-        Option '-o' is curl '-o'.
+         Fetch a release package. Use this if the release is a single executable or to
+         download an archive.
 
-        Example: github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
+         Options:
+           -o   passthrough to curl --output
+
+         Example:
+           github-latest-releast -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
 
       -t
-        Fetch and list files in archive. 
+         Fetch and list files in archive.
 
-        Example: github-latest-release -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
+         Example:
+           github-latest-releast -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
 
       -x
-        Fetch and extract from an archive. 
-        Option '-i' is bsdtar '--include', '-s' is bsdtar '--strip-components', and '-c' is bsdar '-C'.
+         Fetch and extract from an archive.
 
-        Example: github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' -i '*/prometheus' -s 1 -c /tmp
+         Options:
+          -i   passthrough to bsdtar --include
+          -s   passthrough to bsdtar --strip-components
+          -c   passthrough to bsdtar --cd
+
+         Example:
+           github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+                                 -i '*/prometheus' -s 1 -c /tmp
 
 
