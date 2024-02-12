@@ -92,7 +92,7 @@ Options:
 
   -x
     Fetch and extract from an archive. 
-    Option '-i' is bsdtar '--include', '-s' is bsdtar '--strip-components', and '-c' is bsdar '-C'.
+    Option '-i' is bsdtar '--include', '-s' is bsdtar '--strip-components', and '-c' is bsdtar '-C'.
 
     Example: $arg0 -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' -i '*/prometheus' -s 1 -c /tmp
 
@@ -101,6 +101,7 @@ EOF
 
 main() {
     local arg0 opt download_url
+    local repo=""
     local list_url=""
     local fetch=""
     local list_files=""
