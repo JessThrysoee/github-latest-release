@@ -119,7 +119,7 @@ main() {
     local fetch=""
     local list_files=""
     local extract=""
-    local regex_pattern=".*"
+    local regex_pattern=""
     local include_glob_pattern="*"
     local strip_components="0"
     local directory="."
