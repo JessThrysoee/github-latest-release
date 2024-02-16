@@ -11,8 +11,27 @@ from an archive.
 
 A small container is provided for convenience of downloading release executables in a `Dockerfile`, e.g.
 
+    FROM ghcr.io/jessthrysoee/github-latest-release/github-latest-release:latest as octopus
+    RUN set -eux; \
+        github-latest-release -r OctopusDeploy/cli -x -p 'linux_amd64\.tar\.gz$' -i octopus;
+
+    FROM node:20-slim
+    COPY --from=octopus --chown=root:root --chmod=755 /octopus /usr/bin/
+
+
+For [multi-platform images](https://docs.docker.com/build/building/multi-platform/) it may be necessary to create a small
+architecture mapping:
+
     FROM ghcr.io/jessthrysoee/github-latest-release/github-latest-release:latest as ttyd
-    RUN github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.x86_64' -o '/ttyd'
+    ARG TARGETARCH
+
+    RUN set -eux; \
+      case "$TARGETARCH" in      \
+        arm64) ARCH="aarch64" ;; \
+        amd64) ARCH="x86_64"  ;; \
+        *) echo "$TARGETARCH not supported" >&2; exit 1 ;; \
+      esac; \
+      github-latest-release -r 'tsl0922/ttyd' -f -p "ttyd\\.$ARCH" -o '/ttyd'
 
     FROM alpine
     COPY --from=ttyd --chmod=700 /ttyd /
