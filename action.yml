@@ -1,0 +1,5 @@
+name: 'github-latest-release'
+description: 'Fetch the latest release package or executable from a Github repository'
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/jessthrysoee/github-latest-release/github-latest-release:latest'
