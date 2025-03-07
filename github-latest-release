@@ -47,14 +47,16 @@ fetch_release() {
 
 list_files() {
     local download_url="$1"
-    curl -sSL "$download_url" | bsdtar -t
+    local include_glob_pattern="$2"
+
+    curl -sSL "$download_url" | bsdtar -t --include "$include_glob_pattern"
 }
 
 extract_files() {
     local download_url="$1"
     local include_glob_pattern="$2"
-    local directory="$3"
-    local strip_components="$4"
+    local strip_components="$3"
+    local directory="$4"
 
     curl -sSL "$download_url" | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
 }
@@ -65,7 +67,8 @@ Usage:
 
   github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
   github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-  github-latest-releast -r <OWNER/REPO> -t -p <REGEX>
+  github-latest-releast -r <OWNER/REPO> -t -p <REGEX> \
+                        -i [INCLUDE_GLOB]
   github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
                         -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
@@ -94,8 +97,12 @@ Options:
   -t
      Fetch and list files in archive.
 
+     Options:
+      -i   passthrough to bsdtar --include
+
      Example:
-       github-latest-releast -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
+       github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+                             -i '*/prometheus'
 
   -x
      Fetch and extract from an archive.
@@ -161,11 +168,11 @@ main() {
 
     elif [[ -n $list_files ]]; then
         download_url="$(select_download_url "$repo" "$regex_pattern")"
-        list_files "$download_url"
+        list_files "$download_url" "$include_glob_pattern"
 
     elif [[ -n $extract ]]; then
         download_url="$(select_download_url "$repo" "$regex_pattern")"
-        extract_files "$download_url" "$include_glob_pattern" "$directory" "$strip_components"
+        extract_files "$download_url" "$include_glob_pattern" "$strip_components" "$directory"
 
     else
         usage

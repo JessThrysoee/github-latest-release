@@ -8,8 +8,8 @@ from an archive.
 
 # Walk Through
 
-Let say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
-We start by listing all the newest assets:
+Let's say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
+Start by listing all the newest assets:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256
@@ -17,12 +17,12 @@ We start by listing all the newest assets:
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
     ...
 
-Next we use a regex pattern to select a single asset:
+Next, use a regex pattern to select a single asset:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l -p 'latest-linux64-gpl-7'
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
 
-Now we have a single asset, we can list its contents:
+With a single asset, list its contents:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7'
     ...
@@ -30,7 +30,11 @@ Now we have a single asset, we can list its contents:
     ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffplay
     ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg
 
-To extract the two programs, include (-i) only those by a glob pattern and strip (-s) the two leading directories:
+Filter the list, by including (-i) only the matches of a glob-pattern:
+
+    github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*'
+
+Finally extract and strip (-s) the two leading directories:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -x -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*' -s 2
 
@@ -44,7 +48,8 @@ To extract the two programs, include (-i) only those by a glob pattern and strip
 
       github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
       github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-releast -r <OWNER/REPO> -t -p <REGEX>
+      github-latest-releast -r <OWNER/REPO> -t -p <REGEX> \
+                            -i [INCLUDE_GLOB]
       github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
                             -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
@@ -72,6 +77,9 @@ To extract the two programs, include (-i) only those by a glob pattern and strip
 
       -t
          Fetch and list files in archive.
+
+         Options:
+          -i   passthrough to bsdtar --include
 
          Example:
            github-latest-releast -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
@@ -115,3 +123,19 @@ architecture mapping:
 
     FROM alpine
     COPY --from=ttyd --chmod=700 /ttyd /
+
+# Github Action
+
+It can be used as a Github action. For example, to install [Task](https://github.com/go-task/task):
+
+    ...
+    jobs:
+      build:
+        runs-on: ubuntu-latest
+
+        steps:
+          - name: Get latest Task runner
+            uses: jessthrysoee/github-latest-release@1.0.4
+              args: '-r go-task/task -x -p "linux_amd64.tar.gz" -i task'
+
+          - run: ./task --help
