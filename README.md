@@ -2,10 +2,41 @@
 
 Helper script to fetch the latest release package or executable from a Github repository.
 
-It uses [get-the-latest-release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release) API 
+It uses [get-the-latest-release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release) API
 to discover all the available downloads, a regex to select a specific one, and optionally `badtar` options to extract selected files
 from an archive.
 
+# Walk Through
+
+Let say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
+We start by listing all the newest assets:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -l
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+    ...
+
+Next we use a regex pattern to select a single asset:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -l -p 'latest-linux64-gpl-7'
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
+
+Now we have a single asset, we can list its contents:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7'
+    ...
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffplay
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg
+
+To extract the two programs, include (-i) only those by a glob pattern and strip (-s) the two leading directories:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -x -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*' -s 2
+
+    $ ls -1 ff*
+    ffmpeg
+    ffprobe
 
 # Usage
 
@@ -57,8 +88,6 @@ from an archive.
            github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                                  -i '*/prometheus' -s 1 -c /tmp
 
-
-
 # Docker Container
 
 A small container is provided for convenience of downloading release executables in a `Dockerfile`, e.g.
@@ -69,7 +98,6 @@ A small container is provided for convenience of downloading release executables
 
     FROM node:20-slim
     COPY --from=octopus --chown=root:root --chmod=755 /octopus /usr/bin/
-
 
 For [multi-platform images](https://docs.docker.com/build/building/multi-platform/) it may be necessary to create a small
 architecture mapping:
@@ -87,4 +115,3 @@ architecture mapping:
 
     FROM alpine
     COPY --from=ttyd --chmod=700 /ttyd /
-
