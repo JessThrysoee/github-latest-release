@@ -2,10 +2,45 @@
 
 Helper script to fetch the latest release package or executable from a Github repository.
 
-It uses [get-the-latest-release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release) API 
+It uses [get-the-latest-release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release) API
 to discover all the available downloads, a regex to select a specific one, and optionally `badtar` options to extract selected files
 from an archive.
 
+# Walk Through
+
+Let's say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
+Start by listing all the newest assets:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -l
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+    ...
+
+Next, use a regex pattern to select a single asset:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -l -p 'latest-linux64-gpl-7'
+    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
+
+With a single asset, list its contents:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7'
+    ...
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffplay
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg
+
+Filter the list, by including (-i) only the matches of a glob-pattern:
+
+    github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*'
+
+Finally extract and strip (-s) the two leading directories:
+
+    $ github-latest-release -r BtbN/FFmpeg-Builds -x -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*' -s 2
+
+    $ ls -1 ff*
+    ffmpeg
+    ffprobe
 
 # Usage
 
@@ -13,7 +48,8 @@ from an archive.
 
       github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
       github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-releast -r <OWNER/REPO> -t -p <REGEX>
+      github-latest-releast -r <OWNER/REPO> -t -p <REGEX> \
+                            -i [INCLUDE_GLOB]
       github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
                             -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
@@ -42,6 +78,9 @@ from an archive.
       -t
          Fetch and list files in archive.
 
+         Options:
+          -i   passthrough to bsdtar --include
+
          Example:
            github-latest-releast -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
 
@@ -57,8 +96,6 @@ from an archive.
            github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                                  -i '*/prometheus' -s 1 -c /tmp
 
-
-
 # Docker Container
 
 A small container is provided for convenience of downloading release executables in a `Dockerfile`, e.g.
@@ -69,7 +106,6 @@ A small container is provided for convenience of downloading release executables
 
     FROM node:20-slim
     COPY --from=octopus --chown=root:root --chmod=755 /octopus /usr/bin/
-
 
 For [multi-platform images](https://docs.docker.com/build/building/multi-platform/) it may be necessary to create a small
 architecture mapping:
@@ -88,3 +124,18 @@ architecture mapping:
     FROM alpine
     COPY --from=ttyd --chmod=700 /ttyd /
 
+# Github Action
+
+It can be used as a Github action. For example, to install [Task](https://github.com/go-task/task):
+
+    ...
+    jobs:
+      build:
+        runs-on: ubuntu-latest
+
+        steps:
+          - name: Get latest Task runner
+            uses: jessthrysoee/github-latest-release@1.0.4
+              args: '-r go-task/task -x -p "linux_amd64.tar.gz" -i task'
+
+          - run: ./task --help
