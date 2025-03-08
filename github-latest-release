@@ -120,7 +120,7 @@ EOF
 }
 
 main() {
-    local arg0 opt download_url
+    local opt download_url
     local repo=""
     local list_url=""
     local fetch=""
