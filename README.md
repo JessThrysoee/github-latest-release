@@ -46,55 +46,62 @@ Finally extract and strip (-s) the two leading directories:
 
     Usage:
 
-      github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
-      github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-releast -r <OWNER/REPO> -t -p <REGEX> \
+      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
+      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
                             -i [INCLUDE_GLOB]
-      github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
+      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
                             -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
     Options:
 
+      -b <BEARER_TOKEN>
+          Authorization token.
+
+        Example:
+          github-latest-release -b "$(gh auth token)" -r enterprise/repo -l
+
       -r <OWNER/REPO>
-         The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
+        The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
 
       -l
-         List all available download urls. Use the '-p' regex pattern to identify a single
-         download url for use in the fetch commands.
+        List all available download urls. Use the '-p' regex pattern to identify a single
+        download url for use in the fetch commands.
 
-         Example:
-           github-latest-releast -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
+        Example:
+          github-latest-release -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
 
       -f
-         Fetch a release package. Use this if the release is a single executable or to
-         download an archive.
+        Fetch a release package. Use this if the release is a single executable or to
+        download an archive.
 
-         Options:
-           -o   passthrough to curl --output
+        Options:
+          -o   passthrough to curl --output
 
-         Example:
-           github-latest-releast -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
+        Example:
+          github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
 
       -t
-         Fetch and list files in archive.
+        Fetch and list files in archive.
 
-         Options:
+        Options:
           -i   passthrough to bsdtar --include
 
-         Example:
-           github-latest-releast -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$'
+        Example:
+          github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+                                -i '*/prometheus'
 
       -x
-         Fetch and extract from an archive.
+        Fetch and extract from an archive.
 
-         Options:
+        Options:
           -i   passthrough to bsdtar --include
           -s   passthrough to bsdtar --strip-components
           -c   passthrough to bsdtar --cd
 
-         Example:
-           github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
-                                 -i '*/prometheus' -s 1 -c /tmp
+        Example:
+          github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+                                -i '*/prometheus' -s 1 -c /tmp
 
 # Docker Container
 

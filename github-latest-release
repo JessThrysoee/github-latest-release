@@ -4,17 +4,27 @@
 
 set -euo pipefail
 
+
+function curl() {
+  local bearer_token="$1"
+  shift 1
+  command curl -sSL ${bearer_token:+ -H "Authorization: Bearer ${bearer_token}"} "$@"
+}
+
 list_download_urls() {
     local repo="$1"
-    curl -sSL "https://api.github.com/repos/${repo}/releases/latest"  \
+    local bearer_token="$2"
+
+    curl "$bearer_token" "https://api.github.com/repos/${repo}/releases/latest"  \
       | jq --unbuffered -r '.assets[].browser_download_url'
 }
 
 select_download_url() {
     local repo="$1"
     local regex="$2"
+    local bearer_token="$3"
 
-    matches="$(curl -sSL "https://api.github.com/repos/${repo}/releases/latest"  \
+    matches="$(curl "$bearer_token" "https://api.github.com/repos/${repo}/releases/latest"  \
         | jq --unbuffered -r --arg regex "$regex" '.assets[].browser_download_url | select(.|test($regex))')"
 
     if [[ -z $matches ]]; then
@@ -37,19 +47,21 @@ select_download_url() {
 fetch_release() {
     local download_url="$1"
     local output="$2"
+    local bearer_token="$3"
 
     if [[ -n $output ]]; then
-        curl -sSL -o "$output" "$download_url"
+        curl "$bearer_token" -o "$output" "$download_url"
     else
-        curl -sSL -O "$download_url"
+        curl "$bearer_token" -O "$download_url"
     fi
 }
 
 list_files() {
     local download_url="$1"
     local include_glob_pattern="$2"
+    local bearer_token="$3"
 
-    curl -sSL "$download_url" | bsdtar -t --include "$include_glob_pattern"
+    curl "$bearer_token" "$download_url" | bsdtar -t --include "$include_glob_pattern"
 }
 
 extract_files() {
@@ -57,22 +69,29 @@ extract_files() {
     local include_glob_pattern="$2"
     local strip_components="$3"
     local directory="$4"
+    local bearer_token="$5"
 
-    curl -sSL "$download_url" | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
+    curl "$bearer_token" "$download_url" | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
 }
 
 usage() {
     cat <<'EOF'
 Usage:
 
-  github-latest-releast -r <OWNER/REPO> -l -p [REGEX]
-  github-latest-releast -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-  github-latest-releast -r <OWNER/REPO> -t -p <REGEX> \
+  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
+  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
                         -i [INCLUDE_GLOB]
-  github-latest-releast -r <OWNER/REPO> -x -p <REGEX> \
+  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
                         -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
 Options:
+
+  -b <BEARER_TOKEN>
+      Authorization token.
+
+     Example:
+       github-latest-release -b "$(gh auth token)" -r enterprise/repo -l
 
   -r <OWNER/REPO>
      The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
@@ -82,7 +101,7 @@ Options:
      download url for use in the fetch commands.
 
      Example:
-       github-latest-releast -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
+       github-latest-release -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
 
   -f
      Fetch a release package. Use this if the release is a single executable or to
@@ -92,7 +111,7 @@ Options:
        -o   passthrough to curl --output
 
      Example:
-       github-latest-releast -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
+       github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
 
   -t
      Fetch and list files in archive.
@@ -101,7 +120,7 @@ Options:
       -i   passthrough to bsdtar --include
 
      Example:
-       github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+       github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                              -i '*/prometheus'
 
   -x
@@ -113,7 +132,7 @@ Options:
       -c   passthrough to bsdtar --cd
 
      Example:
-       github-latest-releast -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+       github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                              -i '*/prometheus' -s 1 -c /tmp
 
 EOF
@@ -130,9 +149,10 @@ main() {
     local include_glob_pattern="*"
     local strip_components="0"
     local directory="."
+    local bearer_token=""
     local output=""
 
-    while getopts ":r:lftxp:i:s:c:o:h" opt; do
+    while getopts ":r:lftxp:i:s:c:b:o:h" opt; do
         case $opt in
             r) repo="$OPTARG" ;;
             l) list_url="1" ;;
@@ -143,6 +163,7 @@ main() {
             i) include_glob_pattern="$OPTARG" ;;
             s) strip_components="$OPTARG" ;;
             c) directory="$OPTARG" ;;
+            b) bearer_token="$OPTARG" ;;
             o) output="$OPTARG" ;;
             h) usage; exit 0 ;;
             :) echo "Error: -${OPTARG} requires an argument" >&2 ;;
@@ -157,22 +178,22 @@ main() {
 
     if [[ -n $list_url ]]; then
         if [[ -n $regex_pattern ]]; then
-            select_download_url "$repo" "$regex_pattern"
+            select_download_url "$repo" "$regex_pattern" "$bearer_token"
         else
-            list_download_urls "$repo"
+            list_download_urls "$repo" "$bearer_token"
         fi
 
     elif [[ -n $fetch ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern")"
-        fetch_release "$download_url" "$output"
+        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
+        fetch_release "$download_url" "$output" "$bearer_token"
 
     elif [[ -n $list_files ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern")"
-        list_files "$download_url" "$include_glob_pattern"
+        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
+        list_files "$download_url" "$include_glob_pattern" "$bearer_token"
 
     elif [[ -n $extract ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern")"
-        extract_files "$download_url" "$include_glob_pattern" "$strip_components" "$directory"
+        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
+        extract_files "$download_url" "$include_glob_pattern" "$strip_components" "$directory" "$bearer_token"
 
     else
         usage
