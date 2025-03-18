@@ -7,24 +7,37 @@ set -euo pipefail
 
 function curl() {
   local bearer_token="$1"
-  shift 1
-  command curl -sSL ${bearer_token:+ -H "Authorization: Bearer ${bearer_token}"} "$@"
+  local accept="$2"
+  shift 2
+  command curl --fail-with-body -sSL \
+      ${bearer_token:+ -H "Authorization: Bearer ${bearer_token}"} \
+      ${accept:+ -H "Accept: ${accept}"} \
+      "$@"
 }
 
 list_download_urls() {
-    local repo="$1"
-    local bearer_token="$2"
+    local bearer_token="$1"
+    local repo="$2"
 
-    curl "$bearer_token" "https://api.github.com/repos/${repo}/releases/latest"  \
+    curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
       | jq --unbuffered -r '.assets[].browser_download_url'
 }
 
-select_download_url() {
-    local repo="$1"
-    local regex="$2"
-    local bearer_token="$3"
+fetch_asset_metadata() {
+    local bearer_token="$1"
+    local repo="$2"
+    local regex="$3"
 
-    matches="$(curl "$bearer_token" "https://api.github.com/repos/${repo}/releases/latest"  \
+    curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
+        | jq --unbuffered -r --arg regex "$regex" '.assets[] | select(.browser_download_url|test($regex)) | { url, name }'
+}
+
+select_single_download_url() {
+    local bearer_token="$1"
+    local repo="$2"
+    local regex="$3"
+
+    matches="$(curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
         | jq --unbuffered -r --arg regex "$regex" '.assets[].browser_download_url | select(.|test($regex))')"
 
     if [[ -z $matches ]]; then
@@ -45,33 +58,50 @@ select_download_url() {
 }
 
 fetch_release() {
-    local download_url="$1"
-    local output="$2"
-    local bearer_token="$3"
+    local bearer_token="$1"
+    local repo="$2"
+    local regex_pattern="$3"
+    local output="$4"
 
-    if [[ -n $output ]]; then
-        curl "$bearer_token" -o "$output" "$download_url"
-    else
-        curl "$bearer_token" -O "$download_url"
+    local asset asset_url
+    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
+    asset_url="$(jq -r .url <<< "$asset")"
+
+    if [[ -z $output ]]; then
+        output="$(jq -r .name <<< "$asset")"
     fi
+
+    curl "$bearer_token" "application/octet-stream" -o "$output" "$asset_url"
 }
 
 list_files() {
-    local download_url="$1"
-    local include_glob_pattern="$2"
-    local bearer_token="$3"
+    local bearer_token="$1"
+    local repo="$2"
+    local regex_pattern="$3"
+    local include_glob_pattern="$4"
 
-    curl "$bearer_token" "$download_url" | bsdtar -t --include "$include_glob_pattern"
+    local asset asset_url
+    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
+    asset_url="$(jq -r .url <<< "$asset")"
+
+    curl "$bearer_token" "application/octet-stream" "$asset_url" \
+        | bsdtar -t --include "$include_glob_pattern"
 }
 
 extract_files() {
-    local download_url="$1"
-    local include_glob_pattern="$2"
-    local strip_components="$3"
-    local directory="$4"
-    local bearer_token="$5"
+    local bearer_token="$1"
+    local repo="$2"
+    local regex_pattern="$3"
+    local include_glob_pattern="$4"
+    local strip_components="$5"
+    local directory="$6"
 
-    curl "$bearer_token" "$download_url" | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
+    local asset asset_url
+    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
+    asset_url="$(jq -r .url <<< "$asset")"
+
+    curl "$bearer_token" "application/octet-stream" "$asset_url" \
+        | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
 }
 
 usage() {
@@ -139,7 +169,7 @@ EOF
 }
 
 main() {
-    local opt download_url
+    local opt
     local repo=""
     local list_url=""
     local fetch=""
@@ -178,23 +208,22 @@ main() {
 
     if [[ -n $list_url ]]; then
         if [[ -n $regex_pattern ]]; then
-            select_download_url "$repo" "$regex_pattern" "$bearer_token"
+            select_single_download_url "$bearer_token" "$repo" "$regex_pattern"
         else
-            list_download_urls "$repo" "$bearer_token"
+            list_download_urls "$bearer_token" "$repo"
         fi
 
     elif [[ -n $fetch ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
-        fetch_release "$download_url" "$output" "$bearer_token"
+        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
+        fetch_release "$bearer_token" "$repo" "$regex_pattern" "$output"
 
     elif [[ -n $list_files ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
-        list_files "$download_url" "$include_glob_pattern" "$bearer_token"
+        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
+        list_files "$bearer_token" "$repo" "$regex_pattern" "$include_glob_pattern"
 
     elif [[ -n $extract ]]; then
-        download_url="$(select_download_url "$repo" "$regex_pattern" "$bearer_token")"
-        extract_files "$download_url" "$include_glob_pattern" "$strip_components" "$directory" "$bearer_token"
-
+        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
+        extract_files "$bearer_token" "$repo" "$regex_pattern" "$include_glob_pattern" "$strip_components" "$directory"
     else
         usage
         exit 1
