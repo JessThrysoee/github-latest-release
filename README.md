@@ -46,17 +46,17 @@ Finally extract and strip (-s) the two leading directories:
 
     Usage:
 
-      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
-      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
+      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
+      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
                             -i [INCLUDE_GLOB]
-      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
+      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
                             -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
     Options:
 
-      -a <BEARER_TOKEN>
-          Authorization token.
+      -a <AUTH_TOKEN>
+          Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
 
         Example:
           github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
@@ -103,6 +103,15 @@ Finally extract and strip (-s) the two leading directories:
           github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                                 -i '*/prometheus' -s 1 -c /tmp
 
+    Authenticating as a GitHub App installation:
+
+    If all the following environment variables are available and non-empty, a Github App installation
+    access token is generated and used for authentication:
+
+        GITHUB_APP_CLIENT_ID
+        GITHUB_APP_INSTALLATION_ID
+        GITHUB_APP_PRIVATE_KEY
+
 # Docker Container
 
 A small container is provided for convenience of downloading release executables in a `Dockerfile`, e.g.
@@ -113,6 +122,8 @@ A small container is provided for convenience of downloading release executables
 
     FROM node:20-slim
     COPY --from=octopus --chown=root:root --chmod=755 /octopus /usr/bin/
+
+---
 
 For [multi-platform images](https://docs.docker.com/build/building/multi-platform/) it may be necessary to create a small
 architecture mapping:
@@ -130,6 +141,17 @@ architecture mapping:
 
     FROM alpine
     COPY --from=ttyd --chmod=700 /ttyd /
+
+---
+
+In Github Enterprise with internal repositories, the GITHUB_TOKEN does not authorize fetching assets across
+repositories. However, it's possible but painful, to authenticate with a Github App installation like this:
+
+    FROM ghcr.io/jessthrysoee/github-latest-release/github-latest-release:latest as latest
+    RUN --mount=type=secret,id=GITHUB_APP_PRIVATE_KEY,env=GITHUB_APP_PRIVATE_KEY \
+      set -eux; \
+      export GITHUB_APP_CLIENT_ID="Ik2bliVgBIlj9ncKLL4X" GITHUB_APP_INSTALLATION_ID="12013411"; \
+      github-latest-release -r enterprise/repo -f -p 'linux.tar.gz$'
 
 # Github Action
 

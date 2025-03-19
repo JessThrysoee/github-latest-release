@@ -118,17 +118,17 @@ usage() {
     cat <<'EOF'
 Usage:
 
-  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -l -p [REGEX]
-  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -t -p <REGEX> \
+  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
+  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
                         -i [INCLUDE_GLOB]
-  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -x -p <REGEX> \
+  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
                         -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
 Options:
 
-  -a <auth_token>
-      Authorization token.
+  -a <AUTH_TOKEN>
+      Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
 
      Example:
        github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
@@ -174,6 +174,15 @@ Options:
      Example:
        github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
                              -i '*/prometheus' -s 1 -c /tmp
+
+Authenticating as a GitHub App installation:
+
+If all the following environment variables are available and non-empty, a Github App installation
+access token is generated and used for authentication:
+
+     GITHUB_APP_CLIENT_ID
+     GITHUB_APP_INSTALLATION_ID
+     GITHUB_APP_PRIVATE_KEY
 
 EOF
 }
