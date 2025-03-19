@@ -46,20 +46,20 @@ Finally extract and strip (-s) the two leading directories:
 
     Usage:
 
-      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
-      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
+      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
+      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
                             -i [INCLUDE_GLOB]
-      github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
+      github-latest-release [-a <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
                             -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
     Options:
 
-      -b <BEARER_TOKEN>
+      -a <BEARER_TOKEN>
           Authorization token.
 
         Example:
-          github-latest-release -b "$(gh auth token)" -r enterprise/repo -l
+          github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
 
       -r <OWNER/REPO>
         The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'

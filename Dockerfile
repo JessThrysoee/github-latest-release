@@ -1,7 +1,7 @@
 FROM alpine
 
 RUN set -eux; \
-  apk add --no-cache bash curl jq libarchive-tools;
+  apk add --no-cache bash curl jq libarchive-tools openssl;
 
 COPY github-latest-release /usr/local/bin/
 

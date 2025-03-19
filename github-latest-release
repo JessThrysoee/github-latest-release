@@ -1,106 +1,116 @@
 #!/bin/bash
 
-# prerequisite: curl, jq, bsdtar (libarchive-tools)
+# prerequisite: openssl, curl, jq, bsdtar (libarchive-tools)
 
 set -euo pipefail
 
-
 function curl() {
-  local bearer_token="$1"
+  local auth_token="$1"
   local accept="$2"
   shift 2
   command curl --fail-with-body -sSL \
-      ${bearer_token:+ -H "Authorization: Bearer ${bearer_token}"} \
+      ${auth_token:+ -H "Authorization: Bearer ${auth_token}"} \
       ${accept:+ -H "Accept: ${accept}"} \
       "$@"
 }
 
+base64() { openssl base64 -e -A | tr -- '+/' '-_' | tr -d = ; }
+
+sign() {
+    local message="$1"
+    local private_key="$2"
+    printf '%s' "$message" | openssl dgst -binary -sha256 -sign <(printf '%s' "$private_key") | base64
+}
+
+jwt() {
+    local client_id="$1"
+    local private_key="$2"
+
+    local now iat exp header claims jwt
+    now=$(date +%s)
+    iat=$((now - 60))
+    exp=$((now + 600))
+    header=$(printf '%s' '{ "typ":"JWT", "alg": "RS256" }' | base64)
+    claims=$(printf '{ "iss": "%s", "iat": %d, "exp": %d }' "$client_id" "$iat" "$exp" | base64)
+    jwt="$header.$claims.$(sign "$header.$claims" "$private_key")"
+
+    printf '%s' "$jwt"
+}
+
+fetch_installation_access_token() {
+    local installation_id="$1"
+    local jwt_token="$2"
+
+    curl "$jwt_token" "application/vnd.github+json" -X POST \
+            "https://api.github.com/app/installations/$installation_id/access_tokens" \
+        | jq -r '.token'
+}
+
 list_download_urls() {
-    local bearer_token="$1"
+    local auth_token="$1"
     local repo="$2"
 
-    curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
+    curl "$auth_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
       | jq --unbuffered -r '.assets[].browser_download_url'
 }
 
-fetch_asset_metadata() {
-    local bearer_token="$1"
-    local repo="$2"
-    local regex="$3"
+asset_name() { jq -r '.[] | .name' <<< "$1" ; }
 
-    curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
-        | jq --unbuffered -r --arg regex "$regex" '.assets[] | select(.browser_download_url|test($regex)) | { url, name }'
-}
+asset_url() { jq -r '.[] | .url' <<< "$1" ; }
+
+asset_print_browser_download_url() { jq -r '.[] | .browser_download_url' <<< "$1" ; }
 
 select_single_download_url() {
-    local bearer_token="$1"
+    local auth_token="$1"
     local repo="$2"
     local regex="$3"
 
-    matches="$(curl "$bearer_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
-        | jq --unbuffered -r --arg regex "$regex" '.assets[].browser_download_url | select(.|test($regex))')"
+    matches="$(curl "$auth_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
+        | jq --unbuffered -r --arg regex "$regex" '[ .assets[] | select(.browser_download_url|test($regex)) | { url, name, browser_download_url } ]')"
 
+    local length
     if [[ -z $matches ]]; then
-        lines="0"
+        length="0"
     else
-        lines="$(wc -l <<< "$matches" | tr -d '[:blank:]')"
+        length="$(jq length <<< "$matches")"
     fi
 
-    if (( lines != 1 )); then
-        echo "found $lines matches, refine the pattern '$regex' until exactly one match is found" >&2
-        if (( lines > 0 )); then
-            printf "\n%s\n" "$matches" >&2
+    if (( length != 1 )); then
+        echo "found $length matches, refine the pattern '$regex' until exactly one match is found" >&2
+        if (( length > 0 )); then
+            asset_print_browser_download_url "$matches" >&2
         fi
         exit 1
     else
-        printf "%s\n" "$matches"
+        printf '%s' "$matches"
     fi
 }
 
 fetch_release() {
-    local bearer_token="$1"
-    local repo="$2"
-    local regex_pattern="$3"
-    local output="$4"
+    local auth_token="$1"
+    local asset="$2"
+    local output="$3"
 
-    local asset asset_url
-    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
-    asset_url="$(jq -r .url <<< "$asset")"
-
-    if [[ -z $output ]]; then
-        output="$(jq -r .name <<< "$asset")"
-    fi
-
-    curl "$bearer_token" "application/octet-stream" -o "$output" "$asset_url"
+    curl "$auth_token" "application/octet-stream" -o "${output:-$(asset_name "$asset")}" "$(asset_url "$asset")"
 }
 
 list_files() {
-    local bearer_token="$1"
-    local repo="$2"
-    local regex_pattern="$3"
-    local include_glob_pattern="$4"
+    local auth_token="$1"
+    local asset="$2"
+    local include_glob_pattern="$3"
 
-    local asset asset_url
-    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
-    asset_url="$(jq -r .url <<< "$asset")"
-
-    curl "$bearer_token" "application/octet-stream" "$asset_url" \
+    curl "$auth_token" "application/octet-stream" "$(asset_url "$asset")" \
         | bsdtar -t --include "$include_glob_pattern"
 }
 
 extract_files() {
-    local bearer_token="$1"
-    local repo="$2"
-    local regex_pattern="$3"
-    local include_glob_pattern="$4"
-    local strip_components="$5"
-    local directory="$6"
+    local auth_token="$1"
+    local asset="$2"
+    local include_glob_pattern="$3"
+    local strip_components="$4"
+    local directory="$5"
 
-    local asset asset_url
-    asset="$(fetch_asset_metadata "$bearer_token" "$repo" "$regex_pattern")"
-    asset_url="$(jq -r .url <<< "$asset")"
-
-    curl "$bearer_token" "application/octet-stream" "$asset_url" \
+    curl "$auth_token" "application/octet-stream" "$(asset_url "$asset")" \
         | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
 }
 
@@ -108,20 +118,20 @@ usage() {
     cat <<'EOF'
 Usage:
 
-  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
-  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
+  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -l -p [REGEX]
+  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
+  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -t -p <REGEX> \
                         -i [INCLUDE_GLOB]
-  github-latest-release [-b <BEARER_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
+  github-latest-release [-a <auth_token>] -r <OWNER/REPO> -x -p <REGEX> \
                         -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
 
 Options:
 
-  -b <BEARER_TOKEN>
+  -a <auth_token>
       Authorization token.
 
      Example:
-       github-latest-release -b "$(gh auth token)" -r enterprise/repo -l
+       github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
 
   -r <OWNER/REPO>
      The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
@@ -179,10 +189,15 @@ main() {
     local include_glob_pattern="*"
     local strip_components="0"
     local directory="."
-    local bearer_token=""
+    local auth_token="${GITHUB_AUTH_TOKEN:-}"
+    local github_app_client_id="${GITHUB_APP_CLIENT_ID:-}"
+    local github_app_installation_id="${GITHUB_APP_INSTALLATION_ID:-}"
+    local github_app_private_key="${GITHUB_APP_PRIVATE_KEY:-}"
+    local jwt_token=""
     local output=""
+    local asset=""
 
-    while getopts ":r:lftxp:i:s:c:b:o:h" opt; do
+    while getopts ":r:lftxp:i:s:c:a:o:h" opt; do
         case $opt in
             r) repo="$OPTARG" ;;
             l) list_url="1" ;;
@@ -193,7 +208,7 @@ main() {
             i) include_glob_pattern="$OPTARG" ;;
             s) strip_components="$OPTARG" ;;
             c) directory="$OPTARG" ;;
-            b) bearer_token="$OPTARG" ;;
+            a) auth_token="$OPTARG" ;;
             o) output="$OPTARG" ;;
             h) usage; exit 0 ;;
             :) echo "Error: -${OPTARG} requires an argument" >&2 ;;
@@ -206,24 +221,30 @@ main() {
         exit 1
     fi
 
+    if [[ -n $github_app_client_id && -n $github_app_installation_id && -n $github_app_private_key ]]; then
+        jwt_token="$(jwt "$github_app_client_id" "$github_app_private_key")"
+        auth_token="$(fetch_installation_access_token "$github_app_installation_id" "$jwt_token")"
+    fi
+
     if [[ -n $list_url ]]; then
         if [[ -n $regex_pattern ]]; then
-            select_single_download_url "$bearer_token" "$repo" "$regex_pattern"
+            asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+            asset_print_browser_download_url "$asset"
         else
-            list_download_urls "$bearer_token" "$repo"
+            list_download_urls "$auth_token" "$repo"
         fi
 
     elif [[ -n $fetch ]]; then
-        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
-        fetch_release "$bearer_token" "$repo" "$regex_pattern" "$output"
+        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        fetch_release "$auth_token" "$asset" "$output"
 
     elif [[ -n $list_files ]]; then
-        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
-        list_files "$bearer_token" "$repo" "$regex_pattern" "$include_glob_pattern"
+        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        list_files "$auth_token" "$repo" "$regex_pattern" "$include_glob_pattern"
 
     elif [[ -n $extract ]]; then
-        select_single_download_url "$bearer_token" "$repo" "$regex_pattern" >/dev/null
-        extract_files "$bearer_token" "$repo" "$regex_pattern" "$include_glob_pattern" "$strip_components" "$directory"
+        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        extract_files "$auth_token" "$asset" "$include_glob_pattern" "$strip_components" "$directory"
     else
         usage
         exit 1
