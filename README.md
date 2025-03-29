@@ -9,7 +9,7 @@ from an archive.
 # Walk Through
 
 Let's say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds).
-Start by listing all the newest assets:
+Start by listing all (-l) the newest assets:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256
@@ -17,12 +17,12 @@ Start by listing all the newest assets:
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
     ...
 
-Next, use a regex pattern to select a single asset:
+Next, use a regex pattern (-p) to select a single asset:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l -p 'latest-linux64-gpl-7'
     https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
 
-With a single asset, list its contents:
+With a single asset, list its contents (-t):
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7'
     ...
@@ -34,7 +34,7 @@ Filter the list, by including (-i) only the matches of a glob-pattern:
 
     github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*'
 
-Finally extract and strip (-s) the two leading directories:
+Finally extract (-x) and strip (-s) the two leading directories:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -x -p 'latest-linux64-gpl-7' -i '*/bin/ff[mp][!l]*' -s 2
 
