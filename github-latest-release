@@ -160,7 +160,7 @@ Options:
       -i   passthrough to bsdtar --include
 
      Example:
-       github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+       github-latest-release -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$' \
                              -i '*/prometheus'
 
   -x
@@ -249,7 +249,7 @@ main() {
 
     elif [[ -n $list_files ]]; then
         asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
-        list_files "$auth_token" "$repo" "$regex_pattern" "$include_glob_pattern"
+        list_files "$auth_token" "$asset" "$include_glob_pattern"
 
     elif [[ -n $extract ]]; then
         asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"

@@ -88,7 +88,7 @@ Finally extract and strip (-s) the two leading directories:
           -i   passthrough to bsdtar --include
 
         Example:
-          github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+          github-latest-release -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$' \
                                 -i '*/prometheus'
 
       -x
