@@ -19,7 +19,7 @@ base64() { openssl base64 -e -A | tr -- '+/' '-_' | tr -d = ; }
 sign() {
     local message="$1"
     local private_key="$2"
-    printf '%s' "$message" | openssl dgst -binary -sha256 -sign <(printf '%s' "$private_key") | base64
+    printf '%s' "$message" | openssl dgst -binary -sha256 -sign <(printf '%b' "$private_key") | base64
 }
 
 jwt() {
