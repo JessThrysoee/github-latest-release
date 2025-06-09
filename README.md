@@ -12,23 +12,23 @@ Let's say we want to fetch the latest `ffmpeg` and `ffprobe` from [https://githu
 Start by listing all (-l) the newest assets:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l
-    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256
-    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz
-    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+    checksums.sha256
+    ffmpeg-master-latest-linux64-gpl-shared.tar.xz
+    ffmpeg-master-latest-linux64-gpl.tar.xz
     ...
 
 Next, use a regex pattern (-p) to select a single asset:
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -l -p 'latest-linux64-gpl-7'
-    https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
+    ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
 
 With a single asset, list its contents (-t):
 
     $ github-latest-release -r BtbN/FFmpeg-Builds -t -p 'latest-linux64-gpl-7'
     ...
-    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe
     ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffplay
     ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg
+    ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe
 
 Filter the list, by including (-i) only the matches of a glob-pattern:
 
@@ -46,71 +46,79 @@ Finally extract (-x) and strip (-s) the two leading directories:
 
     Usage:
 
-      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
-      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
-                            -i [INCLUDE_GLOB]
-      github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
-                            -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
+      github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -l [-p <REGEX>]
+
+      github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -f [-p <REGEX>] \
+                            [-o <OUTPUT>]
+
+      github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -t [-p <REGEX>] \
+                            [-i <INCLUDE_GLOB>]
+
+      github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -x [-p <REGEX>] \
+                            [-i <INCLUDE_GLOB>] [-s <STRIP_COMPONENTS>] [-c <DIRECTORY>]
 
     Options:
 
       -a <AUTH_TOKEN>
-          Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
+         Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
 
-        Example:
-          github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
+         Example:
+           github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
+
+      -m {release|artifact}
+         Change mode to list and fetch 'release' (default) or 'artifact'.
 
       -r <OWNER/REPO>
-        The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
+         The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
 
       -l
-        List all available download urls. Use the '-p' regex pattern to identify a single
-        download url for use in the fetch commands.
+         List all available download urls. Use the '-p' regex pattern to identify a single
+         download url for use in the fetch commands.
 
-        Example:
-          github-latest-release -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
+         Example:
+           github-latest-release -r prometheus/prometheus -l -p 'linux-amd64.tar.gz$'
 
       -f
-        Fetch a release package. Use this if the release is a single executable or to
-        download an archive.
+         Fetch a release package. Use this if the release is a single executable or to
+         download an archive.
 
-        Options:
-          -o   passthrough to curl --output
+         Options:
+           -o   passthrough to curl --output
 
-        Example:
-          github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
+         Example:
+           github-latest-release -r 'tsl0922/ttyd' -f -p 'ttyd.mips64$' -o '/tmp/ttyd'
 
       -t
-        Fetch and list files in archive.
+         Fetch and list files in archive.
 
-        Options:
+         Options:
           -i   passthrough to bsdtar --include
 
-        Example:
-          github-latest-release -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$' \
-                                -i '*/prometheus'
+         Example:
+           github-latest-release -r prometheus/prometheus -t -p 'linux-amd64.tar.gz$' \
+                                 -i '*/prometheus'
 
       -x
-        Fetch and extract from an archive.
+         Fetch and extract from an archive.
 
-        Options:
+         Options:
           -i   passthrough to bsdtar --include
           -s   passthrough to bsdtar --strip-components
           -c   passthrough to bsdtar --cd
 
-        Example:
-          github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
-                                -i '*/prometheus' -s 1 -c /tmp
+         Example:
+           github-latest-release -r prometheus/prometheus -x -p 'linux-amd64.tar.gz$' \
+                                 -i '*/prometheus' -s 1 -c /tmp
 
     Authenticating as a GitHub App installation:
 
     If all the following environment variables are available and non-empty, a Github App installation
     access token is generated and used for authentication:
 
-        GITHUB_APP_CLIENT_ID
-        GITHUB_APP_INSTALLATION_ID
-        GITHUB_APP_PRIVATE_KEY
+         GITHUB_APP_CLIENT_ID
+         GITHUB_APP_INSTALLATION_ID
+         GITHUB_APP_PRIVATE_KEY
+
 
 # Docker Container
 

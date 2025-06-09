@@ -46,27 +46,42 @@ fetch_installation_access_token() {
         | jq -r '.token'
 }
 
-list_download_urls() {
-    local auth_token="$1"
+latest_url() {
+    local mode="$1"
     local repo="$2"
 
-    curl "$auth_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
-      | jq --unbuffered -r '.assets[].browser_download_url'
+    if [[ $mode == release ]]; then
+        printf 'https://api.github.com/repos/%s/releases/latest' "$repo"
+    elif [[ $mode == artifact ]]; then
+        printf 'https://api.github.com/repos/%s/actions/artifacts' "$repo"
+    else
+        echo "Invalid mode $mode" >&2
+    fi
+}
+
+list_download_urls() {
+    local mode="$1"
+    local auth_token="$2"
+    local repo="$3"
+
+    curl "$auth_token" "application/vnd.github+json" "$(latest_url "$mode" "$repo")" \
+      | jq --unbuffered -r '.assets//.artifacts | .[] | .name'
 }
 
 asset_name() { jq -r '.[] | .name' <<< "$1" ; }
 
 asset_url() { jq -r '.[] | .url' <<< "$1" ; }
 
-asset_print_browser_download_url() { jq -r '.[] | .browser_download_url' <<< "$1" ; }
+asset_print_browser_download_url() { jq -r '.[] | .name' <<< "$1" ; }
 
 select_single_download_url() {
-    local auth_token="$1"
-    local repo="$2"
-    local regex="$3"
+    local mode="$1"
+    local auth_token="$2"
+    local repo="$3"
+    local regex="$4"
 
-    matches="$(curl "$auth_token" "" "https://api.github.com/repos/${repo}/releases/latest" \
-        | jq --unbuffered -r --arg regex "$regex" '[ .assets[] | select(.browser_download_url|test($regex)) | { url, name, browser_download_url } ]')"
+    matches="$(curl "$auth_token" "application/vnd.github+json" "$(latest_url "$mode" "$repo")" \
+        | jq --unbuffered -r --arg regex "$regex" '[ .assets//.artifacts | .[] | select(.name|test($regex)) | { url: .archive_download_url//.url, name } ]')"
 
     local length
     if [[ -z $matches ]]; then
@@ -86,12 +101,24 @@ select_single_download_url() {
     fi
 }
 
+accept_header() {
+    local mode="$1"
+
+    if [[ $mode == release ]]; then
+        printf '%s' "application/octet-stream"
+    elif [[ $mode == artifact ]]; then
+        printf '%s' "application/vnd.github+json"
+    else
+        echo "Invalid mode $mode" >&2
+    fi
+}
+
 fetch_release() {
     local auth_token="$1"
     local asset="$2"
     local output="$3"
 
-    curl "$auth_token" "application/octet-stream" -o "${output:-$(asset_name "$asset")}" "$(asset_url "$asset")"
+    curl "$auth_token" "$(accept_header "$mode")" -o "${output:-$(asset_name "$asset")}" "$(asset_url "$asset")"
 }
 
 list_files() {
@@ -99,7 +126,7 @@ list_files() {
     local asset="$2"
     local include_glob_pattern="$3"
 
-    curl "$auth_token" "application/octet-stream" "$(asset_url "$asset")" \
+    curl "$auth_token" "$(accept_header "$mode")" "$(asset_url "$asset")" \
         | bsdtar -t --include "$include_glob_pattern"
 }
 
@@ -110,7 +137,7 @@ extract_files() {
     local strip_components="$4"
     local directory="$5"
 
-    curl "$auth_token" "application/octet-stream" "$(asset_url "$asset")" \
+    curl "$auth_token" "$(accept_header "$mode")" "$(asset_url "$asset")" \
         | bsdtar -x --include "$include_glob_pattern" --strip-components "$strip_components" -C "$directory"
 }
 
@@ -118,20 +145,27 @@ usage() {
     cat <<'EOF'
 Usage:
 
-  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -l -p [REGEX]
-  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -f -p <REGEX> -o [OUTPUT]
-  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -t -p <REGEX> \
-                        -i [INCLUDE_GLOB]
-  github-latest-release [-a <AUTH_TOKEN>] -r <OWNER/REPO> -x -p <REGEX> \
-                        -i [INCLUDE_GLOB] -s [STRIP_COMPONENTS] -c [DIRECTORY]
+  github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -l [-p <REGEX>]
+
+  github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -f [-p <REGEX>] \
+                        [-o <OUTPUT>]
+
+  github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -t [-p <REGEX>] \
+                        [-i <INCLUDE_GLOB>]
+
+  github-latest-release [-a <AUTH_TOKEN>] [-m {release|artifact}] -r <OWNER/REPO> -x [-p <REGEX>] \
+                        [-i <INCLUDE_GLOB>] [-s <STRIP_COMPONENTS>] [-c <DIRECTORY>]
 
 Options:
 
   -a <AUTH_TOKEN>
-      Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
+     Authorization token. (equivalent to environment variale GITHUB_AUTH_TOKEN)
 
      Example:
        github-latest-release -a "$(gh auth token)" -r enterprise/repo -l
+
+  -m {release|artifact}
+     Change mode to list and fetch 'release' (default) or 'artifact'.
 
   -r <OWNER/REPO>
      The github repo identifier. The 'owner/repo' part of 'https://github.com/owner/repo'
@@ -189,6 +223,7 @@ EOF
 
 main() {
     local opt
+    local mode="release"
     local repo=""
     local list_url=""
     local fetch=""
@@ -206,8 +241,9 @@ main() {
     local output=""
     local asset=""
 
-    while getopts ":r:lftxp:i:s:c:a:o:h" opt; do
+    while getopts ":m:r:lftxp:i:s:c:a:o:h" opt; do
         case $opt in
+            m) mode="$OPTARG" ;;
             r) repo="$OPTARG" ;;
             l) list_url="1" ;;
             f) fetch="1" ;;
@@ -230,6 +266,11 @@ main() {
         exit 1
     fi
 
+    if [[ $mode != release && $mode != artifact ]]; then
+        usage
+        exit 1
+    fi
+
     if [[ -n $github_app_client_id && -n $github_app_installation_id && -n $github_app_private_key ]]; then
         jwt_token="$(jwt "$github_app_client_id" "$github_app_private_key")"
         auth_token="$(fetch_installation_access_token "$github_app_installation_id" "$jwt_token")"
@@ -237,22 +278,22 @@ main() {
 
     if [[ -n $list_url ]]; then
         if [[ -n $regex_pattern ]]; then
-            asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+            asset="$(select_single_download_url "$mode" "$auth_token" "$repo" "$regex_pattern")"
             asset_print_browser_download_url "$asset"
         else
-            list_download_urls "$auth_token" "$repo"
+            list_download_urls "$mode" "$auth_token" "$repo"
         fi
 
     elif [[ -n $fetch ]]; then
-        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        asset="$(select_single_download_url "$mode" "$auth_token" "$repo" "$regex_pattern")"
         fetch_release "$auth_token" "$asset" "$output"
 
     elif [[ -n $list_files ]]; then
-        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        asset="$(select_single_download_url "$mode" "$auth_token" "$repo" "$regex_pattern")"
         list_files "$auth_token" "$asset" "$include_glob_pattern"
 
     elif [[ -n $extract ]]; then
-        asset="$(select_single_download_url "$auth_token" "$repo" "$regex_pattern")"
+        asset="$(select_single_download_url "$mode" "$auth_token" "$repo" "$regex_pattern")"
         extract_files "$auth_token" "$asset" "$include_glob_pattern" "$strip_components" "$directory"
     else
         usage
